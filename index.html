@@ -79,6 +79,7 @@
     <label class="tog"><input type="checkbox" id="shadow" checked> Shadow</label>
     <label class="tog"><input type="checkbox" id="wire"> Wireframe</label>
     <label class="tog"><input type="checkbox" id="axisLay"> Lay flat</label>
+    <label class="tog"><input type="checkbox" id="wiring"> Wiring</label>
   </div>
 
   <div class="row" id="twistWrap">
@@ -180,6 +181,22 @@
   all.forEach(m=>{m.castShadow=true;m.receiveShadow=true;});
   inner.add(...all);
 
+  // ---- internal wiring (viewer-only representation; not printed) ----  pen coords, added to `inner` so it orients + centres with the model
+  const wiring=new T.Group();
+  function wtube(pts,r,color){ const c=new T.CatmullRomCurve3(pts.map(p=>new T.Vector3(p[0],p[1],p[2])));
+    const m=new T.Mesh(new T.TubeGeometry(c, Math.max(14,pts.length*8), r, 8, false),
+      new T.MeshStandardMaterial({color:color,roughness:0.5,metalness:0.1})); m.castShadow=true; wiring.add(m); return m; }
+  wtube([[0,2,112],[0.6,3.8,116],[0,3.4,120],[0,1.6,122]], 1.4, 0xc9a13a);                    // OV5640 camera flex (gold): board socket -> can back
+  [[0x9a2f2f,-0.7],[0x2b2b2b,0],[0x2f5f9a,0.7]].forEach(cd=>wtube([[cd[1],4.6,41],[1+cd[1],5,62],[1+cd[1],3.8,90],[0.5,2.6,101]],0.42,cd[0])); // OLED I2C bundle up the +Y gap
+  [[0x2b2b2b,-0.4],[0x9a2f2f,0.4]].forEach(cd=>wtube([[5,cd[1],28],[4,1,55],[3,2.3,88],[1.6,2.4,101]],0.42,cd[0]));                          // switch wires up from +X
+  wtube([[0,-0.7,78],[0,-2.4,85]], 0.5, 0x9a2f2f);                                             // battery + lead (top)
+  wtube([[0,-0.7,35],[-1.6,-3,52],[-1,-3.1,80],[0,-2.9,85]], 0.5, 0x2b2b2b);                   // battery - lead (up along the cell)
+  const jst=new T.Mesh(new T.BoxGeometry(6.2,3.6,4.6), new T.MeshStandardMaterial({color:0xe9e3d4,roughness:0.6,metalness:0}));
+  jst.position.set(0,-3,88.5); jst.castShadow=true; wiring.add(jst);                           // JST PH 1.25 connector housing
+  wtube([[0,-3,91],[0,-2.4,98]], 1.1, 0xe9e3d4);                                                // JST pigtail -> board BAT pads
+  wtube([[0,-5,114],[0,-3.5,111],[0,-2,108]], 0.6, 0x161616);                                   // U.FL antenna coax (-Y bay -> board)
+  inner.add(wiring);
+
   const ground=new T.Mesh(new T.PlaneGeometry(2000,2000),new T.ShadowMaterial({opacity:0.32}));
   ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
 
@@ -201,17 +218,18 @@
   function setMaterial(i){ const m=makeMaterial(PRESETS[i]); m.wireframe=matState.wire; body.material=m; bottomHalf.material=m; topHalf.material=m; applyMode(); }
   matSel.addEventListener('change',e=>setMaterial(+e.target.value));
 
-  const rubberChk=document.getElementById('rubber'), xrayChk=document.getElementById('xray'),
+  const rubberChk=document.getElementById('rubber'), xrayChk=document.getElementById('xray'), wiringChk=document.getElementById('wiring'),
         splitRange=document.getElementById('split'), splitVal=document.getElementById('splitVal'),
         twistRange=document.getElementById('twist'), twistVal=document.getElementById('twistVal'), twistWrap=document.getElementById('twistWrap'),
         cliprRange=document.getElementById('clipr'), cliprVal=document.getElementById('cliprVal');
   function applyMode(){
-    const mm=+splitRange.value, split=mm>0.5, ghost=xrayChk.checked && !split;
+    const mm=+splitRange.value, split=mm>0.5, ghost=(xrayChk.checked||wiringChk.checked) && !split;
     body.visible=!split;
     clipM.visible=true;   // clip is a separate rotating part - shown in both views
     rubberM.visible=!split && rubberChk.checked;
     bottomHalf.visible=topHalf.visible=split;
     const guts=split||ghost; xiaoM.visible=camM.visible=battM.visible=guts;
+    wiring.visible=wiringChk.checked;   // Wiring toggle shows the flex/wires AND ghosts the shell (via `ghost` above) so they're visible
     const e=split?mm/2:0, nx=0.7071, ny=0.7071;   // explode perpendicular to the ~45° seam
     topHalf.position.set(e*nx, e*ny, 0); bottomHalf.position.set(-e*nx, -e*ny, 0);
     const op=ghost?0.15:1.0;
@@ -226,6 +244,7 @@
     cliprVal.textContent = Math.abs(d)>=40 ? ('open '+(d>0?'CW':'CCW')+' · exposed') : (Math.abs(d)<=5 ? 'closed · hidden' : 'mid-swing'); }
   rubberChk.addEventListener('change',()=>{applyMode();applyTwist();});
   xrayChk.addEventListener('change',applyMode);
+  wiringChk.addEventListener('change',applyMode);
   splitRange.addEventListener('input',()=>{applyMode();applyTwist();});
   twistRange.addEventListener('input',applyTwist);
   cliprRange.addEventListener('input',applyClip);
