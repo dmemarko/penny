@@ -92,8 +92,8 @@
   </div>
 
   <div class="row">
-    <div class="lab"><span>Swing clip → camera</span><span id="cliprVal" style="color:var(--accent)"></span></div>
-    <input type="range" id="clipr" min="0" max="46" value="0" step="1">
+    <div class="lab"><span>Swing clip → camera (either way)</span><span id="cliprVal" style="color:var(--accent)"></span></div>
+    <input type="range" id="clipr" min="-46" max="46" value="0" step="1">
   </div>
 
   <div class="row">
@@ -222,8 +222,8 @@
   }
   function applyTwist(){ const deg=+twistRange.value; rubberM.rotation.z=deg*Math.PI/180;
     twistVal.textContent = !rubberM.visible ? '' : (deg>=33&&deg<=57?'→ screen':(deg>=-57&&deg<=-33?'→ switch':'both hidden')); }
-  function applyClip(){ const d=+cliprRange.value; clipM.rotation.z = -d*Math.PI/180;   // swing the clip CLOCKWISE about the top pivot (Z axis)
-    cliprVal.textContent = d>=40 ? 'open · exposed' : (d<=5 ? 'closed · hidden' : 'mid-swing'); }
+  function applyClip(){ const d=+cliprRange.value; clipM.rotation.z = -d*Math.PI/180;   // swing the clip about the top pivot (Z axis); d>0 = CW, d<0 = CCW (bidirectional)
+    cliprVal.textContent = Math.abs(d)>=40 ? ('open '+(d>0?'CW':'CCW')+' · exposed') : (Math.abs(d)<=5 ? 'closed · hidden' : 'mid-swing'); }
   rubberChk.addEventListener('change',()=>{applyMode();applyTwist();});
   xrayChk.addEventListener('change',applyMode);
   splitRange.addEventListener('input',()=>{applyMode();applyTwist();});
