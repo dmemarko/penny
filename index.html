@@ -98,6 +98,12 @@
   </div>
 
   <div class="row">
+    <div class="lab"><span>Assembly sequence</span><span id="asmVal" style="color:var(--accent)"></span></div>
+    <input type="range" id="asm" min="0" max="100" value="100" step="1">
+    <button id="asmPlay" style="margin-top:8px;width:100%;padding:7px 0;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:7px;cursor:pointer;font:inherit;font-size:13px">▶ Play assembly</button>
+  </div>
+
+  <div class="row">
     <div class="lab">Backdrop</div>
     <div class="seg" id="bgSeg">
       <button data-b="dark" class="on">Dark</button>
@@ -198,8 +204,10 @@
   block(12,1.4,14.5, 0,2.6,109,  0xb8bcc2,0.4,0.85);      // ESP32-S3 module shield can (+Y face)
   block(7.5,1.6,2.6, 0,2.6,116,  0x101012,0.5,0.2);       // camera B2B/FPC socket (+Y, upper) - the flex plugs in here
   block(2.6,1.6,2.6, 6.2,-2.6,114, 0xc9ccd2,0.35,0.9);    // U.FL antenna connector (-Y corner) - coax plugs in here
-  // OV5640 camera flex — flat gold ribbon: FPC socket -> down BEHIND the can back (never crosses the can body)
-  flexRibbon([[0,2.5,116],[0,1.6,117.8],[0,1.12,119],[0,1.12,121.5]], 4.0, 0.35, 0xc9a13a);
+  // OV5640 camera flex — flat gold ribbon. ONE fold fits in the +X gap beside the can (~28mm); the module's real flex is
+  // 78mm, which does NOT fit here (only room for one layer) -> a shorter flex is needed (see report). This shows the fit-limit.
+  flexRibbon([[0,2.5,116],[3.5,3.2,118],[6,3.8,120.5],[6,4.0,126],[5.5,4.2,126],[5.5,4.2,120],
+              [5.8,2.3,119],[3.2,1.1,119.2],[1,1.1,120.5],[0,1.1,121.2]], 2.0, 0.25, 0xc9a13a);
   // OLED I2C: SDA/SCL/GND exit the screen TOP (z51) and run up the +Y gap, clear of the cell, to the board edge  [routes verified by wirecheck.py]
   wtube([[-0.7,5.0,51.6],[-0.4,5.3,66],[0.3,5.25,80],[0.5,3.6,92],[0.7,2.35,100]], 0.3, 0x9a2f2f);   // SDA (red)
   wtube([[0.0,5.0,51.6],[0.1,5.3,66],[0.4,5.25,80],[0.6,3.6,92],[0.8,2.35,100]], 0.3, 0x2f5f9a);      // SCL (blue)
@@ -240,7 +248,9 @@
         splitRange=document.getElementById('split'), splitVal=document.getElementById('splitVal'),
         twistRange=document.getElementById('twist'), twistVal=document.getElementById('twistVal'), twistWrap=document.getElementById('twistWrap'),
         cliprRange=document.getElementById('clipr'), cliprVal=document.getElementById('cliprVal');
+  let assembling=false;
   function applyMode(){
+    if(assembling) return;   // the assembly sequence drives the layout while it's active
     const mm=+splitRange.value, split=mm>0.5, ghost=(xrayChk.checked||wiringChk.checked) && !split;
     body.visible=!split;
     clipM.visible=true;   // clip is a separate rotating part - shown in both views
@@ -250,8 +260,10 @@
     wiring.visible=wiringChk.checked;   // Wiring toggle shows the flex/wires AND ghosts the shell (via `ghost` above) so they're visible
     const e=split?mm/2:0, nx=0.7071, ny=0.7071;   // explode perpendicular to the ~45° seam
     topHalf.position.set(e*nx, e*ny, 0); bottomHalf.position.set(-e*nx, -e*ny, 0);
-    const op=ghost?0.15:1.0;
-    [body.material,chrome,matRubber].forEach(m=>{m.transparent=op<1;m.opacity=op;m.depthWrite=op>=1;});
+    const op=ghost?0.15:(split?0.26:1.0);   // halves go X-ray when ghosting OR when split, so the internals show through
+    body.material.transparent=op<1; body.material.opacity=op; body.material.depthWrite=op>=1;
+    const cop=ghost?0.15:1.0;                 // clip + grip stay solid when the halves are merely split
+    [chrome,matRubber].forEach(m=>{m.transparent=cop<1;m.opacity=cop;m.depthWrite=cop>=1;});
     twistWrap.classList.toggle('off', split || !rubberM.visible);
     splitVal.textContent=split?('+'+mm+' mm'):'assembled';
     renderer.shadowMap.needsUpdate=true;
@@ -266,6 +278,40 @@
   splitRange.addEventListener('input',()=>{applyMode();applyTwist();});
   twistRange.addEventListener('input',applyTwist);
   cliprRange.addEventListener('input',applyClip);
+
+  // ---- assembly SEQUENCE animation ----  each part explodes out of the (see-through) chassis half and drops into its seat, staggered
+  const asmRange=document.getElementById('asm'), asmVal=document.getElementById('asmVal'), asmPlay=document.getElementById('asmPlay');
+  const _n=0.7071;
+  const ASM=[   // {meshes, exploded offset (mm), timeline window over t=0..1}
+    {m:[refM],             v:[_n*14,_n*14,0],  w:[0.06,0.20]},   // refill drops into the barrel channel
+    {m:[battM],            v:[_n*22,_n*22,0],  w:[0.15,0.30]},   // cell into the cradle
+    {m:[xiaoM],            v:[_n*30,_n*30,0],  w:[0.26,0.40]},   // XIAO into the cap cage
+    {m:[camM],             v:[_n*40,_n*40,4],  w:[0.36,0.50]},   // camera into the +Y cradle
+    {m:[dispM,scrM,lensM], v:[0,16,0],         w:[0.44,0.57]},   // OLED into the +Y recess
+    {m:[swM],              v:[13,0,0],         w:[0.53,0.65]},   // switch into the +X track
+    {m:[bottomHalf],       v:[-_n*38,-_n*38,0],w:[0.62,0.80]},   // cover half closes onto the chassis
+    {m:[clipM],            v:[0,0,26],         w:[0.80,0.90]},   // clip pushes onto the boss
+    {m:[rubberM],          v:[_n*24,_n*24,0],  w:[0.90,1.00]},   // grip slides on last
+  ];
+  const smooth=x=>{x=Math.max(0,Math.min(1,x));return x*x*(3-2*x);};
+  function applyAssembly(){
+    const t=+asmRange.value/100;
+    if(t>=0.999){ assembling=false; ASM.forEach(it=>it.m.forEach(o=>o.position.set(0,0,0)));
+      asmVal.textContent='assembled'; applyMode(); applyTwist(); applyClip(); return; }
+    assembling=true; asmVal.textContent = t<=0.02 ? 'exploded' : Math.round(t*100)+'% built';
+    body.visible=false; bottomHalf.visible=topHalf.visible=true; clipM.visible=true; rubberM.visible=true;
+    xiaoM.visible=camM.visible=battM.visible=dispM.visible=scrM.visible=lensM.visible=swM.visible=refM.visible=true;
+    wiring.visible=wiringChk.checked; clipM.rotation.z=0; rubberM.rotation.z=0; topHalf.position.set(0,0,0);
+    body.material.transparent=true; body.material.opacity=0.30; body.material.depthWrite=false;  // chassis half see-through so seating is visible
+    [chrome,matRubber].forEach(m=>{m.transparent=false;m.opacity=1;m.depthWrite=true;});
+    ASM.forEach(it=>{ const k=1-smooth((t-it.w[0])/(it.w[1]-it.w[0]));
+      it.m.forEach(o=>o.position.set(it.v[0]*k, it.v[1]*k, it.v[2]*k)); });
+    renderer.shadowMap.needsUpdate=true;
+  }
+  asmRange.addEventListener('input',applyAssembly);
+  [splitRange,xrayChk,wiringChk,rubberChk,twistRange,cliprRange].forEach(el=>el.addEventListener('input',()=>{ if(assembling){ asmRange.value=100; applyAssembly(); } }));
+  asmPlay.addEventListener('click',()=>{ asmRange.value=0; applyAssembly();
+    const iv=setInterval(()=>{ let v=+asmRange.value+1.3; if(v>=100)v=100; asmRange.value=v; applyAssembly(); if(v>=100)clearInterval(iv); }, 22); });
 
   // orbit
   const FIT=3.6;
