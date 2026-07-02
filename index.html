@@ -199,6 +199,13 @@
     s.moveTo(-hw,-ht);s.lineTo(hw,-ht);s.lineTo(hw,ht);s.lineTo(-hw,ht);s.closePath();
     const g=new T.ExtrudeGeometry(s,{extrudePath:new T.CatmullRomCurve3(pts.map(p=>new T.Vector3(p[0],p[1],p[2]))),steps:60,bevelEnabled:false});
     const m=new T.Mesh(g,new T.MeshStandardMaterial({color:color,roughness:0.4,metalness:0.12,side:T.DoubleSide})); m.castShadow=true; wiring.add(m); return m; }
+  // flat FPC strip in the y-z plane (width along X): CatmullRom through (y,z) pts -> twist-proof ribbon face
+  function flexStrip(pts,w,color){
+    const c=new T.CatmullRomCurve3(pts.map(p=>new T.Vector3(0,p[0],p[1]))), N=80, pos=[], idx=[];
+    for(let i=0;i<=N;i++){ const q=c.getPoint(i/N); pos.push(-w/2,q.y,q.z, w/2,q.y,q.z); }
+    for(let i=0;i<N;i++){ const a=2*i; idx.push(a,a+1,a+2, a+1,a+3,a+2); }
+    const g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(pos,3)); g.setIndex(idx); g.computeVertexNormals();
+    const m=new T.Mesh(g,new T.MeshStandardMaterial({color:color,roughness:0.4,metalness:0.25,side:T.DoubleSide})); m.castShadow=true; wiring.add(m); return m; }
   // flexible FPC antenna: a curved black sheet that adheres to the -Y cap inner wall (opposite the camera), wrapped
   // to hug the ellipse. zc/zh = z centre & height; halfDeg = half the wrap arc; a small copper feed pad + the U.FL tail.
   function antSheet(zc,zh,halfDeg,color){
@@ -216,7 +223,7 @@
   block(1.8,1.2,1.8, -5.5,4.6,100, 0xd8dbe0,0.3,0.9);     // small U.FL antenna socket - on the CAMERA side (+Y face), bottom-left corner by the USB (per the real board)
   // OV5640 camera flex — clean gold ribbon from the board FPC socket, up the +Y flex channel clear of the 8mm board, over the
   // board top edge (z118.5), then down to the camera back. Stock flex is 78mm = FAR too long for the cap; use a ~25-30mm flex.
-  flexRibbon([[0,4.8,116.2],[0.2,4.7,117.4],[0.1,4.6,118.4],[0,3.6,119.1],[0,1.6,119.6]], 2.5, 0.22, 0xc9a13a);
+  flexStrip([[4.88,116.0],[4.85,117.6],[4.65,118.4],[3.8,118.8],[2.4,118.9],[1.15,119.2],[1.08,120.6],[1.08,122.4]], 6.5, 0xc9a13a);
   // OLED I2C: SDA/SCL/GND exit the screen TOP (z51) and run up the +Y gap, clear of the cell, to the board edge  [routes verified by wirecheck.py]
   wtube([[-0.7,5.0,51.6],[-0.4,5.3,66],[0.3,5.25,80],[0.5,4.5,94],[0.7,4.3,100]], 0.3, 0x9a2f2f);   // SDA (red)
   wtube([[0.0,5.0,51.6],[0.1,5.3,66],[0.4,5.25,80],[0.6,4.5,94],[0.8,4.3,100]], 0.3, 0x2f5f9a);      // SCL (blue)
